@@ -32,6 +32,7 @@ dbutils.library.restartPython()
 
 # COMMAND ----------
 
+#prueba para probar que se pueda acceder a la base de datos
 dbutils.widgets.text("catalogo", "workspace")
 dbutils.widgets.text("esquema", "default")
 
