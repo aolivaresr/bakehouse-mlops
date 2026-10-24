@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "6"
+# ///
 # MAGIC %md
 # MAGIC # MLflow en Databricks, paso a paso
 # MAGIC
@@ -131,7 +135,20 @@ print(f"Run: {run.info.run_id} · accuracy {accuracy_score(y_test, pred):.3f}")
 
 # COMMAND ----------
 
-# TODO: crea el run regresion_logistica_c01 con C = 0.1, registra accuracy, f1_macro y el tag autor
+with mlflow.start_run(run_name="regresion_logistica_c01") as run:
+    C = 0.1
+    modelo = make_pipeline(StandardScaler(), LogisticRegression(C=C, max_iter=1000))
+    modelo.fit(X_train, y_train)
+    pred = modelo.predict(X_test)
+
+    mlflow.log_param("algoritmo", "LogisticRegression")
+    mlflow.log_param("C", C)
+    mlflow.log_metric("accuracy", accuracy_score(y_test, pred))
+    mlflow.log_metric("f1_macro", f1_score(y_test, pred,average="macro"))
+    mlflow.set_tag("etapa", "linea_base")
+    mlflow.set_tag("autor", "aolivare")
+    mlflow.log_figure(matriz_confusion(y_test, pred, "Regresión logística"), "matriz_confusion.png")
+    mlflow.log_text("ejecricio 1 del curso: modelo lineal como línea base.", "notas.txt")
 
 
 # COMMAND ----------
@@ -200,7 +217,21 @@ print(f"Búsqueda terminada: {len(combinaciones)} runs hijos")
 
 # COMMAND ----------
 
-# TODO: repite la búsqueda agregando min_samples_leaf en [1, 5] dentro del padre busqueda_random_forest_v2
+combinaciones = [
+    {"n_estimators": n, "max_depth": d, "min_samples_leaf": l} for n in [10, 50, 150] for d in [2, 4, None] for l in [1, 5]]
+
+with mlflow.start_run(run_name="busqueda_random_forest_v2") as padre:
+    mlflow.set_tag("etapa", "busqueda")
+    for params in combinaciones:
+        nombre = f"rf_{params['n_estimators']}_prof_{params['max_depth']}"
+        with mlflow.start_run(run_name=nombre, nested=True):
+            modelo = RandomForestClassifier(random_state=42, **params).fit(X_train, y_train)
+            pred = modelo.predict(X_test)
+            mlflow.log_params({"algoritmo": "RandomForest", **params})
+            mlflow.log_metric("accuracy", accuracy_score(y_test, pred))
+            mlflow.log_metric("f1_macro", f1_score(y_test, pred, average="macro"))
+
+print(f"Búsqueda terminada: {len(combinaciones)} runs hijos")
 
 
 # COMMAND ----------
@@ -371,7 +402,22 @@ display(comparacion)
 
 # COMMAND ----------
 
-# TODO: compara f1_del_alias("challenger") con f1_del_alias("champion") y mueve @champion si el challenger gana
+# DBTITLE 1,Ejercicio 3: regla de promoción
+# Comparar el desempeño de ambos modelos
+f1_champion = f1_del_alias("champion")
+f1_challenger = f1_del_alias("challenger")
+
+print(f"F1-macro Champion:   {f1_champion:.4f}")
+print(f"F1-macro Challenger: {f1_challenger:.4f}")
+
+# Regla de promoción: mover @champion solo si el challenger gana estrictamente
+if f1_challenger > f1_champion:
+    version_ganadora = cliente.get_model_version_by_alias(NOMBRE_MODELO, "challenger").version
+    cliente.set_registered_model_alias(NOMBRE_MODELO, "champion", version_ganadora)
+    print(f"Promoción: @champion ahora apunta a la versión {version_ganadora}")
+else:
+    version_champion = cliente.get_model_version_by_alias(NOMBRE_MODELO, "champion").version
+    print(f"Sin promoción: @champion sigue en la versión {version_champion}")
 
 
 # COMMAND ----------
